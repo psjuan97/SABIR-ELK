@@ -1,7 +1,15 @@
 version: '3.7'
 
 services:
-
+  cerebro:
+    image: lmenezes/cerebro:0.8.4
+    container_name: cerebro
+    ports:
+      - "9000:9000"
+    command:
+      - -Dhosts.0.host=http://elasticsearch:9200
+    networks:
+      - elk
   # The 'setup' service runs a one-off script which initializes the
   # 'logstash_internal' and 'kibana_system' users inside Elasticsearch with the
   # values of the passwords defined in the '.env' file.
@@ -36,14 +44,39 @@ services:
       - "9200:9200"
       - "9300:9300"
     environment:
-      ES_JAVA_OPTS: -Xmx256m -Xms256m
+      node.name: elasticsearch
+      discovery.seed_hosts: elasticsearch01
+      cluster.initial_master_nodes: elasticsearch,elasticsearch01
+      ES_JAVA_OPTS: -Xmx2024m -Xms2024m
       # Bootstrap password.
       # Used to initialize the keystore during the initial startup of
       # Elasticsearch. Ignored on subsequent runs.
       ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:-}
       # Use single node discovery in order to disable production mode and avoid bootstrap checks.
       # see: https://www.elastic.co/guide/en/elasticsearch/reference/current/bootstrap-checks.html
-      discovery.type: single-node
+    networks:
+      - elk
+
+  elasticsearch_slave01:
+    build:
+      context: elasticsearch/
+      args:
+        ELASTIC_VERSION: ${ELASTIC_VERSION}
+    volumes:
+      - ./elasticsearch/config/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro,z
+      - elasticsearch_slave1:/usr/share/elasticsearch/data:z
+    environment:
+      node.name: elasticsearch01
+      discovery.seed_hosts: elasticsearch
+      cluster.initial_master_nodes: elasticsearch,elasticsearch01
+
+      ES_JAVA_OPTS: -Xmx2024m -Xms2024m
+      # Bootstrap password.
+      # Used to initialize the keystore during the initial startup of
+      # Elasticsearch. Ignored on subsequent runs.
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:-}
+      # Use single node discovery in order to disable production mode and avoid bootstrap checks.
+      # see: https://www.elastic.co/guide/en/elasticsearch/reference/current/bootstrap-checks.html
     networks:
       - elk
 
@@ -55,13 +88,14 @@ services:
     volumes:
       - ./logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml:ro,Z
       - ./logstash/pipeline:/usr/share/logstash/pipeline:ro,Z
+      - ./datasets:/datasets
     ports:
       - "5044:5044"
       - "5000:5000/tcp"
       - "5000:5000/udp"
       - "9600:9600"
     environment:
-      LS_JAVA_OPTS: -Xmx256m -Xms256m
+      LS_JAVA_OPTS: -Xmx1024m -Xms1024m
       LOGSTASH_INTERNAL_PASSWORD: ${LOGSTASH_INTERNAL_PASSWORD:-}
     networks:
       - elk
@@ -91,3 +125,4 @@ networks:
 volumes:
   setup:
   elasticsearch:
+  elasticsearch_slave1:
